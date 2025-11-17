@@ -8,6 +8,5 @@ layout: default
 
 # Documentation landing page
 
-This is the test site for round-tripping between GitLab and GitHub.
+This is the test site for round-tripping between GitHub (private) and GitHub (public).
 
-![GitLab icon with arrow pointing to GitHub icon pointing to the word, Workflow](./assets/gl-gh-workflow.png)
