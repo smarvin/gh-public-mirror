@@ -1,9 +1,9 @@
-name: Sync from Public Repo
+name: Sync from Public Repo (gl-copy-site)
 
 on:
-  workflow_dispatch:        # allow manual sync
-  schedule:
-    - cron: "0 * * * *"     # hourly (adjust if needed)
+  repository_dispatch:
+    types: [sync_public_to_private]
+  workflow_dispatch:   # allow manual sync
 
 permissions:
   contents: write
@@ -11,16 +11,19 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout private repo
+      - name: Check out private repo
         uses: actions/checkout@v4
+        with:
+          ref: current   # Your private sync branch
 
       - name: Add public repo as remote
         run: |
           git remote add public https://github.com/smarvin/gl-copy-site.git
-          git fetch public
+          git fetch public mirror
 
-      - name: Merge public/mirror into private/current
+      - name: Merge public/mirror → current
         run: |
           git merge public/mirror --no-edit || echo "No changes to merge."
 
