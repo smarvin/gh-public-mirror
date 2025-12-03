@@ -20,10 +20,10 @@ jobs:
           git remote add public https://github.com/smarvin/gl-copy-site.git
           git fetch public
 
-      - name: Merge public/main into private/main
+      - name: Merge public/mirror into private/current
         run: |
           git merge public/mirror --no-edit || echo "No changes to merge."
 
       - name: Push updates to private repo
         run: |
-          git push origin main
+          git push origin current
