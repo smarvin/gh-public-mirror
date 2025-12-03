@@ -1,0 +1,29 @@
+name: Sync from Public Repo
+
+on:
+  workflow_dispatch:        # allow manual sync
+  schedule:
+    - cron: "0 * * * *"     # hourly (adjust if needed)
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+
+      - name: Add public repo as remote
+        run: |
+          git remote add public https://github.com/smarvin/gl-copy-site.git
+          git fetch public
+
+      - name: Merge public/main into private/main
+        run: |
+          git merge public/mirror --no-edit || echo "No changes to merge."
+
+      - name: Push updates to private repo
+        run: |
+          git push origin main
