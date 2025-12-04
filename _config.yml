@@ -27,3 +27,4 @@ defaults:
     values:
       layout: "post"
 
+github_repo: "https://github.com/smarvin/gl-copy-site"
