@@ -1,0 +1,50 @@
+name: Sync from Public Repo (gl-copy-site)
+
+on:
+  repository_dispatch:
+    types: [sync_public_to_private]  # triggered by public repo
+  workflow_dispatch:   # allows manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️. Check out the private repo branch
+      - name: Check out private repo
+        uses: actions/checkout@v4
+        with:
+          ref: current  # Your private branch to update
+
+      # 2️. Set Git identity for sync bot
+      #    This marks the commit so the private→public workflow can skip loops.
+      - name: Set sync bot identity
+        run: |
+          git config user.name "public-repo-sync-bot"
+          git config user.email "public-sync@example.com"
+
+      # 3️. Add public repo as remote (read-only)
+      - name: Add public repo as remote
+        run: |
+          git remote add public https://github.com/smarvin/gl-copy-site.git
+          git fetch public mirror
+
+      # 4️. Merge public/mirror → current
+      - name: Merge public/mirror into current
+        run: |
+          git merge public/mirror --allow-unrelated-histories -m "Sync: merge public/mirror into current" \
+            || echo "No changes to merge."
+
+      # 5️. Push updates to private repo
+      - name: Push to private repo
+        run: |
+          git push origin current
+
+      # 6️. Log recent commits for visibility
+      - name: Show latest commits
+        run: |
+          git log -5 --oneline
+          git remote -v
