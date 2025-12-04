@@ -8,6 +8,9 @@ on:
 
 jobs:
   sync:
+    # Prevent loops: skip if the commit came from the public→private sync bot
+    if: github.actor != 'public-repo-sync-bot'
+
     runs-on: ubuntu-latest
 
     steps:
