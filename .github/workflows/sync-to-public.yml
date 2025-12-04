@@ -3,31 +3,46 @@ name: Sync Private → Public
 on:
   push:
     branches:
-      - current      # Your source-of-truth branch
-  workflow_dispatch:  # Manual trigger
+      - current      # Source-of-truth branch
+  workflow_dispatch:  # Allows manual trigger
+
+permissions:
+  contents: write
 
 jobs:
   sync:
-    # Prevent loops: skip if the commit came from the public→private sync bot
-    if: github.actor != 'public-repo-sync-bot'
+    # Skip if the commit author is the public→private sync bot
+    if: "!contains(github.event.head_commit.author.name, 'public-repo-sync-bot')"
 
     runs-on: ubuntu-latest
 
     steps:
+      # 1️ Checkout private repo branch
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # 2️ Set Git identity for this sync
       - name: Set up Git identity
         run: |
           git config user.name "Private Repo Sync Bot"
           git config user.email "actions@github.com"
 
+      # 3️ Add public repo remote using PAT
       - name: Add public repo remote
         run: |
           git remote add public https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/smarvin/gl-copy-site.git
 
+      # 4️ Debug: Show remotes
+      - name: Debug remote URL
+        run: git remote -v
+
+      # 5️ Push current → mirror
       - name: Push to public mirror branch
         run: |
           git push public current:mirror --force
+
+      # 6️ Debug: Show last commits
+      - name: Show last commits
+        run: git log -5 --oneline
