@@ -13,29 +13,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout the private repo branch
+      # 1️. Check out the private repo branch
       - name: Check out private repo
         uses: actions/checkout@v4
         with:
           ref: current  # Your private branch to update
 
-      # 2️⃣ Add public repo as remote (read-only)
+      # 2️. Add public repo as remote (read-only)
       - name: Add public repo as remote
         run: |
           git remote add public https://github.com/smarvin/gl-copy-site.git
           git fetch public mirror
 
-      # 3️⃣ Merge public/mirror → current
+      # 3️. Merge public/mirror → current
       - name: Merge public/mirror into current
         run: |
           git merge public/mirror --allow-unrelated-histories -m "Merge public mirror into current" || echo "No changes to merge."
 
-      # 4️⃣ Push updates to private repo
+      # 4️. Push updates to private repo
       - name: Push to private repo
         run: |
           git push origin current
 
-      # 5️⃣ Log recent commits for visibility
+      # 5️. Log recent commits for visibility
       - name: Show latest commits
         run: |
           git log -5 --oneline
