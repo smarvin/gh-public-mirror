@@ -3,30 +3,28 @@ name: Sync Private → Public
 on:
   push:
     branches:
-      - current          # Your source-of-truth branch
-  workflow_dispatch:     # Manual trigger allowed
+      - current
+  workflow_dispatch:
 
 permissions:
-  contents: write         # Allows writing to this private repo
+  contents: write
   actions: read
   id-token: write
 
 jobs:
   sync:
-    # 🔒 Prevent loops: skip if commit came from public→private sync bot
     if: "!contains(github.event.head_commit.author.name, 'public-repo-sync-bot')"
-
     runs-on: ubuntu-latest
 
     steps:
-      # 1️ Checkout private repo with full history
+      # 1️ Checkout private repo
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false   # ⬅ REQUIRED FIX FOR PROPER CREDENTIAL USE
+          persist-credentials: false
 
-      # 2️ Ensure PAT is actually available
+      # 2️ Ensure PAT is set
       - name: Validate PAT exists
         run: |
           if [ -z "${{ secrets.PUBLIC_REPO_PAT }}" ]; then
@@ -36,31 +34,52 @@ jobs:
             echo "✅ PUBLIC_REPO_PAT is present."
           fi
 
-      # 3️ Set Git identity for private→public sync commits
+      # 3️ Bot identity
       - name: Set up Git identity
         run: |
           git config user.name "Private Repo Sync Bot"
           git config user.email "actions@github.com"
 
-      # 4️ Remove GitHub's injected extraheader (GITHUB_TOKEN override)
-      #    This is CRITICAL — otherwise GitHub will refuse your PAT
-      - name: Remove GitHub auth header so PAT is used
+      # 4️ Remove GitHub’s injected auth header
+      - name: Remove GitHub auth header so PAT can authenticate
         run: |
           echo "🧹 Removing GitHub extraheader so PAT can authenticate..."
           git config --unset-all http.https://github.com/.extraheader || true
 
-      # 5️ Add public repo remote using PAT
-      - name: Add public repo remote
+      # 5️ Clone public repo using PAT
+      - name: Clone public repo
         run: |
-          git remote add public https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/smarvin/gl-copy-site.git
-          git remote -v
+          echo "📥 Cloning public repo..."
+          git clone --depth 1 \
+            https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/smarvin/gl-copy-site.git \
+            public
 
-      # 6️ Push private/current → public/mirror 
-      - name: Push to public mirror branch
+      # 6️ Sync everything EXCEPT workflows
+      - name: Sync files (excluding .github/workflows/)
         run: |
-          echo "⬆️ Pushing current → mirror..."
-          git push public current:mirror --force
+          echo "🔄 Syncing private → public (excluding workflows directory)..."
+          rsync -av --delete \
+            --exclude='.github/workflows/' \
+            ./ public/
 
-      # 7️ Show recent commits for debugging
-      - name: Show commit history
+      # 7️ Commit + push back to public repo
+      - name: Commit and push changes to public
+        run: |
+          cd public
+
+          echo "📌 Checking if there are changes..."
+          if git diff --quiet --exit-code; then
+            echo "No changes to push."
+            exit 0
+          fi
+
+          echo "📤 Committing changes..."
+          git add .
+          git commit -m "Sync from private repo (excluding workflows)"
+
+          echo "⬆️ Pushing to public repo..."
+          git push
+
+      # 8️ Debug info
+      - name: Show recent commits
         run: git log -5 --oneline
