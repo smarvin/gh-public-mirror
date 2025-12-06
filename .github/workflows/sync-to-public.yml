@@ -3,8 +3,8 @@ name: Sync Private → Public
 on:
   push:
     branches:
-      - current          # Your source-of-truth branch
-  workflow_dispatch:     # Manual trigger allowed
+      - current          # source-of-truth branch
+  workflow_dispatch:     # manual trigger allowed
 
 permissions:
   contents: write
@@ -13,9 +13,7 @@ permissions:
 
 jobs:
   sync:
-    # 🔒 Skip if commit came from public→private bot
     if: "!contains(github.event.head_commit.author.name, 'public-repo-sync-bot')"
-
     runs-on: ubuntu-latest
 
     steps:
@@ -26,7 +24,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # 2️ Validate PAT availability
+      # 2️ Validate PAT
       - name: Validate PAT exists
         run: |
           if [ -z "${{ secrets.PUBLIC_REPO_PAT }}" ]; then
@@ -36,37 +34,34 @@ jobs:
             echo "✅ PUBLIC_REPO_PAT is present."
           fi
 
-      # 3️ Configure Git
+      # 3️ Set Git identity
       - name: Set up Git identity
         run: |
           git config user.name "Private Repo Sync Bot"
           git config user.email "actions@github.com"
 
-      # 4️ Remove GitHub auth header so PAT is used
-      - name: Remove GitHub auth header
+      # 4️ Remove GitHub auth header
+      - name: Remove GitHub extraheader
         run: |
-          echo "🧹 Removing GitHub extraheader so PAT can authenticate..."
           git config --unset-all http.https://github.com/.extraheader || true
 
-      # 5️ Prepare target directory
-      - name: Prepare public working directory
+      # 5️ Prepare public working directory
+      - name: Prepare public folder
         run: mkdir public
 
-      # 6️ Clone public repo → local ./public
+      # 6️ Clone public repo mirror branch
       - name: Clone public repo (mirror branch)
         run: |
-          echo "⬇️ Cloning public repo mirror branch..."
           git clone \
             --branch mirror \
             --single-branch \
             https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/smarvin/gl-copy-site.git \
             public || true
 
-      # 7️ Ensure repo is initialized even if mirror doesn't exist
+      # 7️ Initialize mirror branch if repo is empty
       - name: Ensure public repo is initialized
         run: |
           cd public
-
           if ! git rev-parse HEAD >/dev/null 2>&1; then
             echo "⚠️ public repo has no commits — initializing mirror..."
             git checkout -b mirror
@@ -78,14 +73,14 @@ jobs:
             echo "✅ public repo already has commits."
           fi
 
-      # 8️ rsync private → public excluding workflows
-      - name: Sync files (excluding .github/workflows/)
+      # 8️ Sync private → public excluding workflows and .git
+      - name: Sync files (exclude workflows and .git)
         run: |
-          echo "🔄 Syncing private → public (excluding workflows)..."
-
+          echo "🔄 Syncing private → public (excluding workflows and .git)..."
           exit_code=0
           rsync -av --delete \
             --exclude='.github/workflows/' \
+            --exclude='.git/' \
             ./ \
             public/ || exit_code=$?
 
@@ -93,15 +88,13 @@ jobs:
             echo "⚠️ rsync reported vanished files (code 24), safe to ignore."
             exit 0
           fi
-
           if [ "$exit_code" != "0" ]; then
             echo "❌ rsync failed with exit code $exit_code"
             exit $exit_code
           fi
-
           echo "✅ rsync completed."
 
-      # 9️ Commit changes if needed
+      # 9️ Commit changes if any
       - name: Commit synced content
         run: |
           cd public
@@ -112,8 +105,8 @@ jobs:
             git commit -m "Sync from private current → public mirror"
           fi
 
-      # 🔟 Push to mirror
-      - name: Push to public/mirror
+      # 🔟 Push to public mirror branch
+      - name: Push to public mirror
         run: |
           cd public
           echo "⬆️ Pushing to public mirror..."
