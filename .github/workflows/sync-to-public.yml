@@ -3,58 +3,122 @@ name: Sync Private → Public
 on:
   push:
     branches:
-      - current         # Source-of-truth branch
-  workflow_dispatch:     # Allow manual runs
+      - current          # Your source-of-truth branch
+  workflow_dispatch:     # Manual trigger allowed
 
 permissions:
   contents: write
+  actions: read
+  id-token: write
 
 jobs:
   sync:
-    # Prevent loops from public → private sync
+    # 🔒 Skip if commit came from public→private bot
     if: "!contains(github.event.head_commit.author.name, 'public-repo-sync-bot')"
 
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Checkout the private repository
+      # 1️ Checkout private repo
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false   # ⬅ REQUIRED FIX FOR PROPER CREDENTIAL USE
+          persist-credentials: false
 
-      # 2) Debug: Confirm secret is present
-      - name: Debug secret availability
+      # 2️ Validate PAT availability
+      - name: Validate PAT exists
         run: |
           if [ -z "${{ secrets.PUBLIC_REPO_PAT }}" ]; then
             echo "❌ PUBLIC_REPO_PAT is NOT set!"
             exit 1
           else
-            echo "✅ PUBLIC_REPO_PAT is available."
+            echo "✅ PUBLIC_REPO_PAT is present."
           fi
 
-      # 3) Set up Git identity for the push
-      - name: Configure Git identity
+      # 3️ Configure Git
+      - name: Set up Git identity
         run: |
           git config user.name "Private Repo Sync Bot"
           git config user.email "actions@github.com"
 
-      # 4) Add remote using PAT
-      - name: Add public repo remote
+      # 4️ Remove GitHub auth header so PAT is used
+      - name: Remove GitHub auth header
         run: |
-          git remote add public https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/smarvin/gl-copy-site.git
+          echo "🧹 Removing GitHub extraheader so PAT can authenticate..."
+          git config --unset-all http.https://github.com/.extraheader || true
 
-      # 5) Debug: Verify remote URLs
-      - name: Show Git remotes
-        run: git remote -v
+      # 5️ Prepare target directory
+      - name: Prepare public working directory
+        run: mkdir public
 
-      # 6) Push current → mirror (force overwrite)
-      - name: Push to public mirror branch
+      # 6️ Clone public repo → local ./public
+      - name: Clone public repo (mirror branch)
         run: |
-          echo "Pushing current → mirror..."
-          git push public current:mirror --force
+          echo "⬇️ Cloning public repo mirror branch..."
+          git clone \
+            --branch mirror \
+            --single-branch \
+            https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/smarvin/gl-copy-site.git \
+            public || true
 
-      # 7) Debug: Show recent commits
-      - name: Show last commits
+      # 7️ Ensure repo is initialized even if mirror doesn't exist
+      - name: Ensure public repo is initialized
+        run: |
+          cd public
+
+          if ! git rev-parse HEAD >/dev/null 2>&1; then
+            echo "⚠️ public repo has no commits — initializing mirror..."
+            git checkout -b mirror
+            touch .placeholder
+            git add .placeholder
+            git commit -m "Initialize mirror branch"
+            git push origin mirror
+          else
+            echo "✅ public repo already has commits."
+          fi
+
+      # 8️ rsync private → public excluding workflows
+      - name: Sync files (excluding .github/workflows/)
+        run: |
+          echo "🔄 Syncing private → public (excluding workflows)..."
+
+          exit_code=0
+          rsync -av --delete \
+            --exclude='.github/workflows/' \
+            ./ \
+            public/ || exit_code=$?
+
+          if [ "$exit_code" = "24" ]; then
+            echo "⚠️ rsync reported vanished files (code 24), safe to ignore."
+            exit 0
+          fi
+
+          if [ "$exit_code" != "0" ]; then
+            echo "❌ rsync failed with exit code $exit_code"
+            exit $exit_code
+          fi
+
+          echo "✅ rsync completed."
+
+      # 9️ Commit changes if needed
+      - name: Commit synced content
+        run: |
+          cd public
+          if git diff --quiet; then
+            echo "✨ No changes to commit."
+          else
+            git add -A
+            git commit -m "Sync from private current → public mirror"
+          fi
+
+      # 🔟 Push to mirror
+      - name: Push to public/mirror
+        run: |
+          cd public
+          echo "⬆️ Pushing to public mirror..."
+          git push origin HEAD:mirror --force
+
+      # 11 Debug log
+      - name: Show recent commits
         run: git log -5 --oneline
