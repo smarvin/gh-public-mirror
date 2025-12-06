@@ -34,8 +34,8 @@ jobs:
             echo "✅ PUBLIC_REPO_PAT is present."
           fi
 
-      # 3️ Set Git identity
-      - name: Set up Git identity
+      # 3️ Set Git identity in private repo
+      - name: Set up Git identity (private repo)
         run: |
           git config user.name "Private Repo Sync Bot"
           git config user.email "actions@github.com"
@@ -45,7 +45,7 @@ jobs:
         run: |
           git config --unset-all http.https://github.com/.extraheader || true
 
-      # 5️ Prepare public working directory
+      # 5️ Prepare public folder
       - name: Prepare public folder
         run: mkdir public
 
@@ -58,10 +58,14 @@ jobs:
             https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/smarvin/gl-copy-site.git \
             public || true
 
-      # 7️ Initialize mirror branch if repo is empty
-      - name: Ensure public repo is initialized
+      # 7️ Initialize mirror branch if empty and set identity
+      - name: Initialize public repo and set Git identity
         run: |
           cd public
+          # Set identity in public repo
+          git config user.name "Private Repo Sync Bot"
+          git config user.email "actions@github.com"
+
           if ! git rev-parse HEAD >/dev/null 2>&1; then
             echo "⚠️ public repo has no commits — initializing mirror..."
             git checkout -b mirror
