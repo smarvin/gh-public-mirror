@@ -2,93 +2,76 @@ name: Sync Public → Private
 
 on:
   repository_dispatch:
-    types: [sync_public_to_private]  # Triggered by public repo webhook
-  workflow_dispatch:                 # Allows manual trigger
+    types: [sync_public_to_private]
+  workflow_dispatch:
 
-permissions:
-  contents: write 
-  workflows: write
-  
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout default branch (main) to detect workflow
-      - name: Checkout private repo default branch
+      # 1️⃣ Checkout with PAT (enables pushing workflow files)
+      - name: Checkout private repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history
+          fetch-depth: 0
           ref: main
+          token: ${{ secrets.SYNC_PAT }}  # Use PAT instead of GITHUB_TOKEN
 
-      # 2️⃣ Set Git identity for any commits
+      # 2️⃣ Set Git identity
       - name: Set up Git identity
         run: |
           git config user.name "public-repo-sync-bot"
           git config user.email "actions@github.com"
 
-      # 3️⃣ Fetch target branch `current` and switch to it
+      # 3️⃣ Checkout target branch
       - name: Checkout target branch
         run: |
           git fetch origin current
           git checkout -B current origin/current
 
-      # 4️⃣ Add public repo remote (read-only)
+      # 4️⃣ Add public repo remote
       - name: Add public repo remote
         run: |
           git remote add public https://github.com/smarvin/gl-copy-site.git || echo "Remote already exists"
           git fetch public mirror
 
-      # 5️⃣ Debug: show remotes
+      # 5️⃣ Debug remotes
       - name: Debug remotes
         run: git remote -v
 
-      # 6️⃣ Merge public/mirror → current (squash merge, exclude workflows)
+      # 6️⃣ Merge (squash to avoid history issues)
       - name: Merge public mirror into current
         run: |
-          # Check if there are differences
-          if git diff --quiet current public/mirror -- . ':!.github/workflows' 2>/dev/null; then
-            echo "✅ No changes to merge (excluding workflows)"
+          if git diff --quiet current public/mirror 2>/dev/null; then
+            echo "✅ No changes to merge"
             exit 0
           fi
           
-          echo "Performing squash merge..."
-          
-          # Squash merge - stages changes without commit or history reference
           git merge --squash public/mirror --allow-unrelated-histories || {
             echo "⚠️ Conflicts detected, keeping private repo's version..."
             git checkout --ours .
             git add -A
           }
           
-          # Remove any staged workflow file changes
-          git reset HEAD -- .github/workflows/ 2>/dev/null || true
-          git checkout -- .github/workflows/ 2>/dev/null || true
-          
-          # Check if there's anything left to commit
           if git diff --cached --quiet; then
-            echo "ℹ️ No non-workflow changes to commit"
+            echo "ℹ️ No changes to commit"
             exit 0
           fi
           
-          # Commit the squashed changes (without workflow files)
           git commit -m "Sync from public mirror"
-          echo "✅ Squash merge committed (workflows excluded)"
+          echo "✅ Changes committed"
 
-      # 7️⃣ Show last commits after merge
+      # 7️⃣ Show last commits
       - name: Show last commits
         run: git log -5 --oneline
 
-      # 8️⃣ Push changes to private repo (current branch)
-      - name: Push merged changes to private repo
+      # 8️⃣ Push with PAT
+      - name: Push changes
         run: |
-          if git diff --quiet origin/current 2>/dev/null; then
-            echo "ℹ️ No changes to push"
-          else
-            git push origin current
-            echo "✅ Changes pushed to private repo"
-          fi
+          git push origin current
+          echo "✅ Pushed to private repo"
 
-      # 9️⃣ Final confirmation
+      # 9️⃣ Done
       - name: Sync complete
         run: echo "✅ Public → Private sync finished successfully"
