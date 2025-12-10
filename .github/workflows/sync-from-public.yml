@@ -45,12 +45,24 @@ jobs:
       # 6️⃣ Merge public/mirror → current safely
       - name: Merge public mirror into current
         run: |
-          # Try a fast-forward merge first
-          if git merge --ff-only public/mirror; then
-            echo "Fast-forward merge succeeded"
+          if git diff --quiet current public/mirror 2>/dev/null; then
+            echo "✅ No changes to merge"
+            exit 0
+          fi
+          
+          if git merge --ff-only public/mirror 2>/dev/null; then
+            echo "✅ Fast-forward merge succeeded"
           else
-            # Fallback to normal merge if needed
-            git merge public/mirror --allow-unrelated-histories -m "Merge public mirror into current" || echo "No changes or merge conflict"
+            echo "Attempting merge..."
+            if git merge public/mirror --allow-unrelated-histories --no-edit -m "Merge public mirror into current"; then
+              echo "✅ Merge succeeded"
+            else
+              echo "⚠️ Conflicts detected, keeping private repo's version..."
+              git checkout --ours .
+              git add -A
+              git commit -m "Merge public mirror (kept private version for conflicts)"
+              echo "✅ Resolved using private repo's version"
+            fi
           fi
 
       # 7️⃣ Show last commits after merge
