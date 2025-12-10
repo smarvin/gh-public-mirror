@@ -42,7 +42,7 @@ jobs:
       - name: Debug remotes
         run: git remote -v
 
-      # 6️⃣ Merge public/mirror → current safely
+       # 6️⃣ Merge public/mirror → current (private repo wins conflicts)
       - name: Merge public mirror into current
         run: |
           if git diff --quiet current public/mirror 2>/dev/null; then
