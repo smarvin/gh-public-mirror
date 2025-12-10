@@ -42,40 +42,37 @@ jobs:
       - name: Debug remotes
         run: git remote -v
 
-      # 6️⃣ Merge public/mirror → current (private repo wins conflicts, exclude workflows)
+      # 6️⃣ Merge public/mirror → current (squash merge, exclude workflows)
       - name: Merge public mirror into current
         run: |
-          if git diff --quiet current public/mirror 2>/dev/null; then
-            echo "✅ No changes to merge"
+          # Check if there are differences
+          if git diff --quiet current public/mirror -- . ':!.github/workflows' 2>/dev/null; then
+            echo "✅ No changes to merge (excluding workflows)"
             exit 0
           fi
           
-          if git merge --ff-only public/mirror 2>/dev/null; then
-            echo "✅ Fast-forward merge succeeded"
-            
-            # Restore private workflows after fast-forward
-            git checkout origin/current -- .github/workflows/ 2>/dev/null || true
-            if ! git diff --quiet; then
-              git add -A
-              git commit -m "Restore private repo workflows"
-            fi
-          else
-            echo "Attempting merge with --no-commit..."
-            
-            # Merge but don't commit yet
-            git merge public/mirror --allow-unrelated-histories --no-commit --no-edit || {
-              echo "⚠️ Conflicts detected, keeping private repo's version..."
-              git checkout --ours .
-            }
-            
-            # Restore private repo's workflow files BEFORE committing
-            git checkout origin/current -- .github/workflows/ 2>/dev/null || true
-            
-            # Now commit the merge (without the workflow changes)
+          echo "Performing squash merge..."
+          
+          # Squash merge - stages changes without commit or history reference
+          git merge --squash public/mirror --allow-unrelated-histories || {
+            echo "⚠️ Conflicts detected, keeping private repo's version..."
+            git checkout --ours .
             git add -A
-            git commit -m "Merge public mirror into current"
-            echo "✅ Merge committed (private workflows preserved)"
+          }
+          
+          # Remove any staged workflow file changes
+          git reset HEAD -- .github/workflows/ 2>/dev/null || true
+          git checkout -- .github/workflows/ 2>/dev/null || true
+          
+          # Check if there's anything left to commit
+          if git diff --cached --quiet; then
+            echo "ℹ️ No non-workflow changes to commit"
+            exit 0
           fi
+          
+          # Commit the squashed changes (without workflow files)
+          git commit -m "Sync from public mirror"
+          echo "✅ Squash merge committed (workflows excluded)"
 
       # 7️⃣ Show last commits after merge
       - name: Show last commits
