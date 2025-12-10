@@ -66,6 +66,15 @@ jobs:
       - name: Show last commits
         run: git log -5 --oneline
 
+      # Debug: Check git remote URL
+      - name: Debug git config
+        run: |
+          echo "Remote URL:"
+          git remote get-url origin
+          echo "---"
+          echo "Credential helper:"
+          git config --list | grep credential || echo "No credential config"
+
       # 8️⃣ Push with PAT
       - name: Push changes
         run: |
