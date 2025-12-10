@@ -6,8 +6,9 @@ on:
   workflow_dispatch:                 # Allows manual trigger
 
 permissions:
-  contents: write  # Needed to push changes to the private repo
-
+  contents: write 
+  workflows: write
+  
 jobs:
   sync:
     runs-on: ubuntu-latest
