@@ -42,7 +42,7 @@ jobs:
       - name: Debug remotes
         run: git remote -v
 
-       # 6️⃣ Merge public/mirror → current (private repo wins conflicts)
+      # 6️⃣ Merge public/mirror → current (private repo wins conflicts, exclude workflows)
       - name: Merge public mirror into current
         run: |
           if git diff --quiet current public/mirror 2>/dev/null; then
@@ -52,17 +52,29 @@ jobs:
           
           if git merge --ff-only public/mirror 2>/dev/null; then
             echo "✅ Fast-forward merge succeeded"
+            
+            # Restore private workflows after fast-forward
+            git checkout origin/current -- .github/workflows/ 2>/dev/null || true
+            if ! git diff --quiet; then
+              git add -A
+              git commit -m "Restore private repo workflows"
+            fi
           else
-            echo "Attempting merge..."
-            if git merge public/mirror --allow-unrelated-histories --no-edit -m "Merge public mirror into current"; then
-              echo "✅ Merge succeeded"
-            else
+            echo "Attempting merge with --no-commit..."
+            
+            # Merge but don't commit yet
+            git merge public/mirror --allow-unrelated-histories --no-commit --no-edit || {
               echo "⚠️ Conflicts detected, keeping private repo's version..."
               git checkout --ours .
-              git add -A
-              git commit -m "Merge public mirror (kept private version for conflicts)"
-              echo "✅ Resolved using private repo's version"
-            fi
+            }
+            
+            # Restore private repo's workflow files BEFORE committing
+            git checkout origin/current -- .github/workflows/ 2>/dev/null || true
+            
+            # Now commit the merge (without the workflow changes)
+            git add -A
+            git commit -m "Merge public mirror into current"
+            echo "✅ Merge committed (private workflows preserved)"
           fi
 
       # 7️⃣ Show last commits after merge
@@ -72,8 +84,13 @@ jobs:
       # 8️⃣ Push changes to private repo (current branch)
       - name: Push merged changes to private repo
         run: |
-          git push origin current
+          if git diff --quiet origin/current 2>/dev/null; then
+            echo "ℹ️ No changes to push"
+          else
+            git push origin current
+            echo "✅ Changes pushed to private repo"
+          fi
 
       # 9️⃣ Final confirmation
       - name: Sync complete
-        run: echo "Public → Private sync finished successfully"
+        run: echo "✅ Public → Private sync finished successfully"
