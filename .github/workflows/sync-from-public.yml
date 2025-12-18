@@ -2,85 +2,98 @@ name: Sync Public → Private
 
 on:
   repository_dispatch:
-    types: [sync_public_to_private]
-  workflow_dispatch:
+    types: [sync_public_to_private]  # Triggered by public repo webhook
+  workflow_dispatch:                 # Allows manual trigger
+
+permissions:
+  contents: write  # Needed to push changes to the private repo
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout with PAT (enables pushing workflow files)
-      - name: Checkout private repo
+      # 1️⃣ Checkout default branch (main) to detect workflow
+      - name: Checkout private repo default branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Fetch all history
           ref: main
-          token: ${{ secrets.SYNC_PAT }}  # Use PAT instead of GITHUB_TOKEN
 
-      # 2️⃣ Set Git identity
+      # 2️⃣ Set Git identity for any commits
       - name: Set up Git identity
         run: |
           git config user.name "public-repo-sync-bot"
           git config user.email "actions@github.com"
 
-      # 3️⃣ Checkout target branch
+      # 3️⃣ Fetch target branch `current` and switch to it
       - name: Checkout target branch
         run: |
           git fetch origin current
           git checkout -B current origin/current
 
-      # 4️⃣ Add public repo remote
+      # 4️⃣ Add public repo remote (read-only)
       - name: Add public repo remote
         run: |
           git remote add public https://github.com/smarvin/gl-copy-site.git || echo "Remote already exists"
           git fetch public mirror
 
-      # 5️⃣ Debug remotes
+      # 5️⃣ Debug: show remotes
       - name: Debug remotes
         run: git remote -v
 
-      # 6️⃣ Merge (squash to avoid history issues)
-      - name: Merge public mirror into current
+      # 6️⃣ One-time history alignment (runs once, then self-disables)
+      - name: One-time history alignment
         run: |
-          if git diff --quiet current public/mirror 2>/dev/null; then
-            echo "✅ No changes to merge"
+          set -euo pipefail
+      
+          git checkout current
+          git fetch public mirror
+      
+          # Skip if already aligned
+          if [ -f .github/.history-aligned ]; then
+            echo "History already aligned — skipping"
             exit 0
           fi
-          
-          git merge --squash public/mirror --allow-unrelated-histories || {
-            echo "⚠️ Conflicts detected, keeping private repo's version..."
-            git checkout --ours .
-            git add -A
-          }
-          
-          if git diff --cached --quiet; then
-            echo "ℹ️ No changes to commit"
+      
+          # Skip if histories already related
+          if git merge-base --is-ancestor public/mirror current 2>/dev/null || \
+             git merge-base --is-ancestor current public/mirror 2>/dev/null; then
+            echo "Histories already related — skipping"
             exit 0
           fi
-          
-          git commit -m "Sync from public mirror"
-          echo "✅ Changes committed"
+      
+          echo "Unrelated histories detected — aligning once"
+      
+          git reset --hard public/mirror
+      
+          mkdir -p .github
+          echo "History aligned on $(date -u)" > .github/.history-aligned
+          git add .github/.history-aligned
+          git commit -m "Align history with public mirror (one-time)"
+      
+          git push origin current --force-with-lease
 
-      # 7️⃣ Show last commits
+      # 6️⃣ Merge public/mirror → current safely
+      # - name: Merge public mirror into current
+      #  run: |
+          # Try a fast-forward merge first
+      #    if git merge --ff-only public/mirror; then
+      #      echo "Fast-forward merge succeeded"
+      #    else
+            # Fallback to normal merge if needed
+      #      git merge public/mirror --allow-unrelated-histories -m "Merge public mirror into current" || echo "No changes or merge conflict"
+      #    fi
+
+      # 7️⃣ Show last commits after merge
       - name: Show last commits
         run: git log -5 --oneline
 
-      # Debug: Check git remote URL
-      - name: Debug git config
-        run: |
-          echo "Remote URL:"
-          git remote get-url origin
-          echo "---"
-          echo "Credential helper:"
-          git config --list | grep credential || echo "No credential config"
-
-      # 8️⃣ Push with PAT
-      - name: Push changes
+      # 8️⃣ Push changes to private repo (current branch)
+      - name: Push merged changes to private repo
         run: |
           git push origin current
-          echo "✅ Pushed to private repo"
 
-      # 9️⃣ Done
+      # 9️⃣ Final confirmation
       - name: Sync complete
-        run: echo "✅ Public → Private sync finished successfully"
+        run: echo "Public → Private sync finished successfully"
