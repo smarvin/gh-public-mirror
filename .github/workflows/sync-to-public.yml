@@ -1,4 +1,4 @@
-name: Sync Public → Private
+name: Sync Private → Public
 
 on:
   repository_dispatch:
