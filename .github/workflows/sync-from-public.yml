@@ -2,43 +2,34 @@ name: Sync Public → Private
 
 on:
   repository_dispatch:
-    types: [sync_public_to_private]  # Triggered by public repo webhook
-  workflow_dispatch:                 # Allows manual trigger
+    types: [sync_public_to_private]
+  workflow_dispatch:
 
 permissions:
-  contents: write  # Needed to push changes to the private repo
+  contents: write
+  workflows: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout default branch (main) to detect workflow
-      - name: Checkout private repo default branch
+      - name: Checkout private repo (current branch)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history
-          ref: main
+          fetch-depth: 0
+          ref: current
 
-      # 2️⃣ Set Git identity for any commits
       - name: Set up Git identity
         run: |
           git config user.name "public-repo-sync-bot"
           git config user.email "actions@github.com"
 
-      # 3️⃣ Fetch target branch `current` and switch to it
-      - name: Checkout target branch
-        run: |
-          git fetch origin current
-          git checkout -B current origin/current
-
-      # 4️⃣ Add public repo remote (read-only)
       - name: Add public repo remote
         run: |
           git remote add public https://github.com/smarvin/gl-copy-site.git || echo "Remote already exists"
           git fetch public mirror
 
-      # 5️⃣ Debug: show remotes
       - name: Debug remotes
         run: git remote -v
 
@@ -85,15 +76,19 @@ jobs:
       #      git merge public/mirror --allow-unrelated-histories -m "Merge public mirror into current" || echo "No changes or merge conflict"
       #    fi
 
-      # 7️⃣ Show last commits after merge
+          echo "Unrelated histories detected — aligning once"
+
+          git reset --hard public/mirror
+
+          mkdir -p .github
+          echo "History aligned on $(date -u)" > .github/.history-aligned
+          git add .github/.history-aligned
+          git commit -m "Align history with public mirror (one-time)"
+
+          git push origin current --force-with-lease
+
       - name: Show last commits
         run: git log -5 --oneline
 
-      # 8️⃣ Push changes to private repo (current branch)
-      - name: Push merged changes to private repo
-        run: |
-          git push origin current
-
-      # 9️⃣ Final confirmation
       - name: Sync complete
         run: echo "Public → Private sync finished successfully"
