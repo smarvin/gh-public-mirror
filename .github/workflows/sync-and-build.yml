@@ -7,7 +7,7 @@ on:
   repository_dispatch:
     types: [sync_public_to_private, sync_private_to_public]
 
-# Top-level permissions (valid)
+# Top-level permissions
 permissions:
   contents: write
   pages: write
@@ -22,9 +22,6 @@ jobs:
     if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     name: Sync Public → Private
-    permissions:
-      contents: write
-      workflows: write  # only this job needs workflow permissions
 
     steps:
       - uses: actions/checkout@v4
