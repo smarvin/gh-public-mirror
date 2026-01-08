@@ -1,24 +1,30 @@
-name: Private Repo Content Sync & Build
+name: Sync & Build
 
 on:
   push:
-    branches: [main]   # Build & deploy only on main
+    branches: [main]   # Build & deploy only when main is updated
   workflow_dispatch:
   repository_dispatch:
     types: [sync_public_to_private, sync_private_to_public]
 
+# Top-level permissions (valid)
 permissions:
   contents: write
-  workflows: write
   pages: write
   id-token: write
 
 jobs:
 
+  # ---------------------------
+  # Sync Public Contributions
+  # ---------------------------
   sync_public_to_private:
     if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    name: Sync Public Contributions
+    name: Sync Public → Private
+    permissions:
+      contents: write
+      workflows: write  # only this job needs workflow permissions
 
     steps:
       - uses: actions/checkout@v4
@@ -53,10 +59,13 @@ jobs:
           base: current
           head: content
 
+  # ---------------------------
+  # Push Private Content to Public
+  # ---------------------------
   push_private_to_public:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' }}
     runs-on: ubuntu-latest
-    name: Push Private Content to Public Mirror
+    name: Push Private → Public Mirror
     needs: sync_public_to_private
 
     steps:
@@ -83,6 +92,9 @@ jobs:
       - name: Push content branch to public mirror
         run: git push public content:mirror
 
+  # ---------------------------
+  # Build & Deploy Jekyll
+  # ---------------------------
   build_and_deploy:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
