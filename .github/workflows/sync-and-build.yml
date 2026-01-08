@@ -1,0 +1,117 @@
+name: Private Repo Content Sync & Build
+
+on:
+  push:
+    branches: [main]   # Build & deploy only on main
+  workflow_dispatch:
+  repository_dispatch:
+    types: [sync_public_to_private, sync_private_to_public]
+
+permissions:
+  contents: write
+  workflows: write
+  pages: write
+  id-token: write
+
+jobs:
+
+  sync_public_to_private:
+    if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    name: Sync Public Contributions
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content
+          fetch-depth: 0
+
+      - name: Set Git identity
+        run: |
+          git config user.name "public-repo-sync-bot"
+          git config user.email "actions@github.com"
+
+      - name: Add public remote
+        run: |
+          git remote add public https://github.com/smarvin/gl-copy-site.git || true
+          git fetch public mirror
+
+      - name: Merge public mirror into content
+        run: |
+          git merge --no-ff public/mirror -m "Merge public mirror into content" || echo "Already up-to-date"
+
+      - name: Push content branch
+        run: git push origin content
+
+      - name: Open PR to current
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Sync content from public mirror"
+          title: "Sync content from public mirror"
+          body: "Automated PR to bring public content into private repo"
+          base: current
+          head: content
+
+  push_private_to_public:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' }}
+    runs-on: ubuntu-latest
+    name: Push Private Content to Public Mirror
+    needs: sync_public_to_private
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_PAT }}
+
+      - name: Set Git identity
+        run: |
+          git config user.name "private-repo-sync-bot"
+          git config user.email "actions@github.com"
+
+      - name: Add public remote
+        run: |
+          git remote add public https://github.com/smarvin/gl-copy-site.git || true
+          git fetch public mirror
+
+      - name: Merge public mirror into content (optional)
+        run: |
+          git merge --no-ff public/mirror -m "Merge public mirror into content" || echo "Already up-to-date"
+
+      - name: Push content branch to public mirror
+        run: git push public content:mirror
+
+  build_and_deploy:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    name: Build & Deploy Jekyll
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install dependencies
+        run: bundle install
+
+      - name: Build Jekyll site
+        run: bundle exec jekyll build -d _site
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
