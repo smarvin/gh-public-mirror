@@ -19,7 +19,7 @@ jobs:
   # Sync Public Contributions
   # ---------------------------
   sync_public_to_private:
-    if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'repository_dispatch' && github.event.action == 'sync_public_to_private' }}
     runs-on: ubuntu-latest
     name: Sync Public → Private
 
@@ -37,7 +37,7 @@ jobs:
 
       - name: Add public remote
         run: |
-          git remote add public https://github.com/smarvin/gl-copy-site.git || true
+          git remote add public https://github.com/smarvin/gh-copy-site.git || true
           git fetch public mirror
 
       - name: Merge public mirror into content
@@ -61,7 +61,7 @@ jobs:
   # Push Private Content to Public
   # ---------------------------
   push_private_to_public:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     name: Push Private → Public Mirror
     needs: sync_public_to_private
@@ -81,7 +81,7 @@ jobs:
 
       - name: Add public remote
         run: |
-          git remote add public https://github.com/smarvin/gl-copy-site.git || true
+          git remote add public https://github.com/smarvin/gh-copy-site.git || true
           git fetch public mirror
 
       - name: Merge public mirror into content
