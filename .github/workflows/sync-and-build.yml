@@ -24,7 +24,8 @@ jobs:
     name: Sync Public → Private
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout content branch
+        uses: actions/checkout@v4
         with:
           ref: content
           fetch-depth: 0
@@ -66,7 +67,8 @@ jobs:
     needs: sync_public_to_private
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout content branch
+        uses: actions/checkout@v4
         with:
           ref: content
           fetch-depth: 0
@@ -82,7 +84,7 @@ jobs:
           git remote add public https://github.com/smarvin/gl-copy-site.git || true
           git fetch public mirror
 
-      - name: Merge public mirror into content (optional)
+      - name: Merge public mirror into content
         run: |
           git merge --no-ff public/mirror -m "Merge public mirror into content" || echo "Already up-to-date"
 
@@ -93,21 +95,24 @@ jobs:
   # Build & Deploy Jekyll
   # ---------------------------
   build_and_deploy:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     name: Build & Deploy Jekyll
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout main branch
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: ruby/setup-ruby@v1
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
 
@@ -117,7 +122,7 @@ jobs:
       - name: Build Jekyll site
         run: bundle exec jekyll build -d _site
 
-      - name: Upload Pages Artifact
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
