@@ -16,7 +16,7 @@ permissions:
 jobs:
 
   # ---------------------------
-  # 1️⃣ Sync Public Contributions → Private
+  # 1 Sync Public Contributions → Private
   # ---------------------------
   sync_public_to_private:
     # Only run when triggered via repository_dispatch from public repo
@@ -64,7 +64,7 @@ jobs:
           head: content
 
   # ---------------------------
-  # 2️⃣ Build & Deploy Jekyll (on main)
+  # 2 Build & Deploy Jekyll (on main)
   # ---------------------------
   build_and_deploy:
     # Only run when main is updated (push) or manually triggered
@@ -108,7 +108,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
   # ---------------------------
-  # 3️⃣ Push Published Content → Public Mirror
+  # 3 Push Published Content → Public Mirror
   # ---------------------------
   push_to_public_mirror:
     needs: build_and_deploy  # Run only after successful build & deploy
