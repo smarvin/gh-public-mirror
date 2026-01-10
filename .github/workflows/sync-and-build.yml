@@ -1,13 +1,13 @@
 name: Sync & Build
 
 on:
+  # Trigger build & public sync only after main is updated
   push:
-    branches: [main]   # Build & deploy only when main is updated
-  workflow_dispatch:
+    branches: [main]
+  workflow_dispatch:  # Optional manual trigger
   repository_dispatch:
-    types: [sync_public_to_private, sync_private_to_public]
+    types: [sync_public_to_private]  # Only public → private sync
 
-# Top-level permissions
 permissions:
   contents: write
   pages: write
@@ -16,7 +16,7 @@ permissions:
 jobs:
 
   # ---------------------------
-  # Sync Public Contributions
+  # Sync Public Contributions → Private
   # ---------------------------
   sync_public_to_private:
     if: ${{ github.event_name == 'repository_dispatch' && github.event.action == 'sync_public_to_private' }}
@@ -24,8 +24,7 @@ jobs:
     name: Sync Public → Private
 
     steps:
-      - name: Checkout content branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: content
           fetch-depth: 0
@@ -58,41 +57,7 @@ jobs:
           head: content
 
   # ---------------------------
-  # Push Private Content to Public
-  # ---------------------------
-  push_private_to_public:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    name: Push Private → Public Mirror
-    needs: sync_public_to_private
-
-    steps:
-      - name: Checkout content branch
-        uses: actions/checkout@v4
-        with:
-          ref: content
-          fetch-depth: 0
-          token: ${{ secrets.SYNC_PAT }}
-
-      - name: Set Git identity
-        run: |
-          git config user.name "private-repo-sync-bot"
-          git config user.email "actions@github.com"
-
-      - name: Add public remote
-        run: |
-          git remote add public https://github.com/smarvin/gh-public-mirror.git || true
-          git fetch public mirror
-
-      - name: Merge public mirror into content
-        run: |
-          git merge --no-ff public/mirror -m "Merge public mirror into content" || echo "Already up-to-date"
-
-      - name: Push content branch to public mirror
-        run: git push public content:mirror
-
-  # ---------------------------
-  # Build & Deploy Jekyll
+  # Build & Deploy Jekyll (on main)
   # ---------------------------
   build_and_deploy:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
@@ -100,19 +65,16 @@ jobs:
     name: Build & Deploy Jekyll
 
     steps:
-      - name: Checkout main branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
 
@@ -129,3 +91,28 @@ jobs:
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
+
+  # ---------------------------
+  # Push Published Content → Public Mirror
+  # ---------------------------
+  push_to_public_mirror:
+    needs: build_and_deploy
+    runs-on: ubuntu-latest
+    name: Push Published Content to Public Mirror
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_PAT }}
+
+      - name: Set Git identity
+        run: |
+          git config user.name "private-repo-sync-bot"
+          git config user.email "actions@github.com"
+
+      - name: Add public remote
+        run: git remote add public https://github.com/smarvin/gh-public-mirror.git || true
+
+      - name: Push main → mirror
+        run: git push public main:mirror
