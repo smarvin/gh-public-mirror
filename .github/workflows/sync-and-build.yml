@@ -37,7 +37,7 @@ jobs:
 
       - name: Add public remote
         run: |
-          git remote add public https://github.com/smarvin/gh-copy-site.git || true
+          git remote add public https://github.com/smarvin/gh-public-mirror.git || true
           git fetch public mirror
 
       - name: Merge public mirror into content
@@ -81,7 +81,7 @@ jobs:
 
       - name: Add public remote
         run: |
-          git remote add public https://github.com/smarvin/gh-copy-site.git || true
+          git remote add public https://github.com/smarvin/gh-public-mirror.git || true
           git fetch public mirror
 
       - name: Merge public mirror into content
