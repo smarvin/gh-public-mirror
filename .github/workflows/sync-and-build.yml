@@ -1,58 +1,58 @@
 name: Sync & Build
 
 on:
-  # Trigger build & public sync when main is updated (i.e., published content)
   push:
-    branches: [main]
-  workflow_dispatch:  # Optional manual trigger
-  repository_dispatch:
-    types: [sync_public_to_private]  # Only public → private sync
+    branches: [main]   # Only trigger build/deploy when main is updated
+  workflow_dispatch:    # Allows manual triggering
+  repository_dispatch:  # Used to trigger specific sync events
+    types: [sync_public_to_private, sync_private_to_public]
 
+# Top-level permissions
 permissions:
-  contents: write     # Needed for reading/writing repository files
-  pages: write        # Needed for GitHub Pages deploy
-  id-token: write     # Needed by deploy-pages for authentication
+  contents: write       # Needed for pushing commits
+  pages: write          # Needed to deploy GitHub Pages
+  id-token: write       # Needed for GitHub Actions authentication
 
 jobs:
 
   # ---------------------------
-  # 1 Sync Public Contributions → Private
+  # Sync Public Contributions → Private
   # ---------------------------
   sync_public_to_private:
-    # Only run when triggered via repository_dispatch from public repo
     if: ${{ github.event_name == 'repository_dispatch' && github.event.action == 'sync_public_to_private' }}
     runs-on: ubuntu-latest
     name: Sync Public → Private
 
     steps:
-      # Checkout the content branch (this mirrors the public contributions)
-      - uses: actions/checkout@v4
+      # Checkout the private content branch
+      - name: Checkout content branch
+        uses: actions/checkout@v4
         with:
           ref: content
           fetch-depth: 0
 
-      # Configure a bot identity for commits
+      # Configure Git identity for commits
       - name: Set Git identity
         run: |
           git config user.name "public-repo-sync-bot"
           git config user.email "actions@github.com"
 
-      # Add the public repository as a remote and fetch mirror branch
+      # Add the public repo as a remote and fetch mirror branch
       - name: Add public remote
         run: |
           git remote add public https://github.com/smarvin/gh-public-mirror.git || true
           git fetch public mirror
 
-      # Merge contributions from the public mirror into content branch
+      # Merge public mirror into content (fast-forward or commit)
       - name: Merge public mirror into content
         run: |
           git merge --no-ff public/mirror -m "Merge public mirror into content" || echo "Already up-to-date"
 
-      # Push merged content back to content branch in private repo
+      # Push merged content branch to private repo
       - name: Push content branch
         run: git push origin content
 
-      # Open a Pull Request to merge content → current branch
+      # Open a pull request from content → current
       - name: Open PR to current
         uses: peter-evans/create-pull-request@v5
         with:
@@ -64,74 +64,84 @@ jobs:
           head: content
 
   # ---------------------------
-  # 2 Build & Deploy Jekyll (on main)
+  # Build & Deploy Jekyll
   # ---------------------------
   build_and_deploy:
-    # Only run when main is updated (push) or manually triggered
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     name: Build & Deploy Jekyll
 
     steps:
-      # Checkout the repository
-      - uses: actions/checkout@v4
+      # Checkout main branch (source for Jekyll)
+      - name: Checkout main branch
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Set up Ruby for Jekyll
-      - uses: ruby/setup-ruby@v1
+      # Setup Ruby environment for Jekyll
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
 
-      # Set up Node for assets (if any)
-      - uses: actions/setup-node@v4
+      # Setup Node for asset compilation if needed
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
 
-      # Install Jekyll and other dependencies
+      # Install dependencies via Bundler
       - name: Install dependencies
         run: bundle install
 
-      # Build the static site
+      # Build the Jekyll site into _site directory
       - name: Build Jekyll site
         run: bundle exec jekyll build -d _site
 
-      # Upload build artifact for deployment
+      # Upload the generated site for GitHub Pages
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
-      # Deploy the site to GitHub Pages
+      # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
 
   # ---------------------------
-  # 3 Push Published Content → Public Mirror
+  # Push Private Content → Public Mirror
   # ---------------------------
-  push_to_public_mirror:
-    needs: build_and_deploy  # Run only after successful build & deploy
+  push_private_to_public:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    name: Push Published Content to Public Mirror
+    name: Push Private → Public Mirror
+    needs: build_and_deploy   # Only runs after build & deploy completes
 
     steps:
-      # Checkout main branch (published content)
-      - uses: actions/checkout@v4
+      # Checkout main branch (final published content)
+      - name: Checkout main branch
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.SYNC_PAT }}  # Personal Access Token with write to public repo
 
-      # Set a bot identity for push
+      # Set Git identity for committing/pushing
       - name: Set Git identity
         run: |
           git config user.name "private-repo-sync-bot"
           git config user.email "actions@github.com"
 
-      # Add public repository as remote
-      - name: Add public remote
-        run: git remote add public https://github.com/smarvin/gh-public-mirror.git || true
+      # Add public repo remote using PAT for authentication
+      - name: Add public remote (with PAT)
+        run: |
+          git remote add public https://smarvin:${{ secrets.SYNC_PAT }}@github.com/smarvin/gh-public-mirror.git
+          git fetch public
 
-      # Push only after main has been published
+      # Optional merge to ensure no divergence before pushing
+      - name: Merge public mirror into main (optional safety)
+        run: |
+          git merge --no-ff public/mirror -m "Merge public mirror into main" || echo "Already up-to-date"
+
+      # Push main branch to public mirror
       - name: Push main → mirror
         run: git push public main:mirror
