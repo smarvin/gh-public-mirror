@@ -134,7 +134,7 @@ jobs:
       # Add public repo remote using PAT for authentication
       - name: Add public remote (with PAT)
         run: |
-          git remote add public https://smarvin:${{ secrets.SYNC_PAT }}@github.com/smarvin/gh-public-mirror.git
+          git remote add public https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/smarvin/gh-public-mirror.git
           git fetch public
 
       # Optional merge to ensure no divergence before pushing
