@@ -110,39 +110,39 @@ jobs:
         uses: actions/deploy-pages@v4
 
   # ---------------------------
-# Push Private Content to Public
-# ---------------------------
-push_private_to_public:
-  name: Push Private → Public Mirror
-  if: ${{ github.event_name == 'workflow_dispatch' }}
-  runs-on: ubuntu-latest
+  # Push Private Content to Public
+  # ---------------------------
+  push_private_to_public:
+    name: Push Private → Public Mirror
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
 
-  steps:
-    - name: Checkout content branch using PAT
-      uses: actions/checkout@v4
-      with:
-        ref: content
-        fetch-depth: 0
-        token: ${{ secrets.SYNC_PAT }}   # Forces git to use your PAT
+    steps:
+      - name: Checkout content branch using PAT
+        uses: actions/checkout@v4
+        with:
+          ref: content
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_PAT }}   # Forces git to use your PAT
 
-    - name: Set Git identity
-      run: |
-        git config user.name "private-repo-sync-bot"
-        git config user.email "actions@github.com"
+      - name: Set Git identity
+        run: |
+          git config user.name "private-repo-sync-bot"
+          git config user.email "actions@github.com"
 
-    - name: Add public remote using PAT
-      run: |
-        git remote remove public 2>/dev/null || true
-        git remote add public https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/smarvin/gh-public-mirror.git
-        git fetch public mirror
+      - name: Add public remote using PAT
+        run: |
+          git remote remove public 2>/dev/null || true
+          git remote add public https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/smarvin/gh-public-mirror.git
+          git fetch public mirror
 
-    - name: Safety check
-      run: |
-        git status
-        git branch -a
-        git remote -v
+      - name: Safety check
+        run: |
+          git status
+          git branch -a
+          git remote -v
 
-    - name: Push content to public mirror
-      run: |
-        git push public content:mirror
+      - name: Push content to public mirror
+        run: |
+          git push public content:mirror
 
