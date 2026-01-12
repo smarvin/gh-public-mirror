@@ -110,25 +110,24 @@ jobs:
         uses: actions/deploy-pages@v4
 
   # ---------------------------
-  # Sync Published Site to Public
+  # Push Private Content to Public
   # ---------------------------
-  sync_main_to_public:
-    name: Sync Main → Public Mirror
-    needs: build_and_deploy
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  push_private_to_public:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    name: Publish Private Content → Public Mirror
+    needs: build_and_deploy   # Only run after the build succeeds
 
     steps:
-      - name: Checkout main
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
           token: ${{ secrets.SYNC_PAT }}
 
       - name: Set Git identity
         run: |
-          git config user.name "publish-sync-bot"
+          git config user.name "private-repo-sync-bot"
           git config user.email "actions@github.com"
 
       - name: Add public remote
@@ -136,8 +135,22 @@ jobs:
           git remote add public https://smarvin:${{ secrets.SYNC_PAT }}@github.com/smarvin/gh-public-mirror.git || true
           git fetch public mirror
 
-      - name: Push main to public mirror
+      - name: Prepare content for public (exclude workflows)
         run: |
-          git push public main:mirror
+          # Make a temporary branch for publishing
+          git checkout -b publish-temp
+          # Remove workflows from commit
+          git rm -r --cached .github/workflows || true
+          rm -rf .github/workflows
+          git add -A
+          git commit -m "Publish site content (no workflows)" || echo "Nothing to commit"
+
+      - name: Push content to public mirror
+        run: |
+          git push public publish-temp:mirror --force
+
+      - name: Cleanup temporary branch
+        run: git checkout main && git branch -D publish-temp
+
 
 
