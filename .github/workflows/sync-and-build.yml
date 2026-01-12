@@ -110,38 +110,39 @@ jobs:
         uses: actions/deploy-pages@v4
 
   # ---------------------------
-  # Push Private Content → Public Mirror
-  # ---------------------------
-  push_private_to_public:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    name: Push Private → Public Mirror
-    needs: build_and_deploy   # Only runs after build & deploy completes
+# Push Private Content to Public
+# ---------------------------
+push_private_to_public:
+  name: Push Private → Public Mirror
+  if: ${{ github.event_name == 'workflow_dispatch' }}
+  runs-on: ubuntu-latest
 
-    steps:
-      # Checkout main branch (final published content)
-      - name: Checkout main branch
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  steps:
+    - name: Checkout content branch using PAT
+      uses: actions/checkout@v4
+      with:
+        ref: content
+        fetch-depth: 0
+        token: ${{ secrets.SYNC_PAT }}   # Forces git to use your PAT
 
-      # Set Git identity for committing/pushing
-      - name: Set Git identity
-        run: |
-          git config user.name "private-repo-sync-bot"
-          git config user.email "actions@github.com"
+    - name: Set Git identity
+      run: |
+        git config user.name "private-repo-sync-bot"
+        git config user.email "actions@github.com"
 
-      # Add public repo remote using PAT for authentication
-      - name: Add public remote (with PAT)
-        run: |
-          git remote add public https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/smarvin/gh-public-mirror.git
-          git fetch public
+    - name: Add public remote using PAT
+      run: |
+        git remote remove public 2>/dev/null || true
+        git remote add public https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/smarvin/gh-public-mirror.git
+        git fetch public mirror
 
-      # Optional merge to ensure no divergence before pushing
-      - name: Merge public mirror into main (optional safety)
-        run: |
-          git merge --no-ff public/mirror -m "Merge public mirror into main" || echo "Already up-to-date"
+    - name: Safety check
+      run: |
+        git status
+        git branch -a
+        git remote -v
 
-      # Push main branch to public mirror
-      - name: Push main → mirror
-        run: git push public main:mirror
+    - name: Push content to public mirror
+      run: |
+        git push public content:mirror
+
