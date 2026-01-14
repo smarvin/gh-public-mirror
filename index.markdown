@@ -8,5 +8,5 @@ layout: default
 
 # Documentation landing page
 
-This is the test site for round-tripping between GitHub (private) and GitHub (public).
+This is the test site for round-tripping between GitHub (private) and GitHub (public). Too much round-tripping can get you into trouble. 
 
