@@ -10,5 +10,5 @@ layout: default
 
 This is the test site for round-tripping between GitHub (private) and GitHub (public). Too much round-tripping can get you into trouble. 
 
-This is a test second paragraph from a contributor. It serves as a test for the sync workflow.
+This is a test second paragraph from a contributor. It serves as a test for the sync workflow. And that's not all. 
 
