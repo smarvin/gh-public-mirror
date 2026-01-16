@@ -18,9 +18,9 @@ jobs:
             -d '{"event_type": "sync_public_to_private"}')
           
           if [ "$HTTP_STATUS" = "204" ]; then
-            echo "✅ Private repo triggered successfully!"
+            echo "Private repo triggered successfully!"
           else
-            echo "❌ Failed with status: $HTTP_STATUS"
+            echo "Failed with status: $HTTP_STATUS"
             cat response.json
             exit 1
           fi
